@@ -1,0 +1,58 @@
+# Use Ubuntu 18.04 as the base image
+FROM ubuntu:18.04
+
+# Update package list and install necessary packages
+RUN apt-get update && apt-get install -y \
+    wget \
+    build-essential \
+    zlib1g-dev \
+    libssl-dev \
+    libpam0g-dev \
+    libselinux1-dev \
+    libedit-dev \
+    libcurl4-openssl-dev \
+    libxml2-dev \
+    snmpd \
+    snmp \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Create the sshd privilege separation user
+RUN useradd -r -d /var/empty/sshd -s /sbin/nologin sshd
+
+
+# Download and install OpenSSL
+RUN wget https://www.openssl.org/source/openssl-1.0.2.tar.gz && \
+    tar -xzf openssl-1.0.2.tar.gz && \
+    cd openssl-1.0.2 && \
+    ./config && \
+    make && \
+    make install && \
+    cd .. && \
+    rm -rf openssl-1.0.2.tar.gz openssl-1.0.2
+
+
+# Ensure the new OpenSSL is used by defining LD_LIBRARY_PATH
+ENV LD_LIBRARY_PATH="/usr/local/lib"
+
+# Download and install OpenSSH 7.6
+RUN wget --no-check-certificate https://ftp.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-7.0p1.tar.gz && \
+    tar -xzf openssh-7.0p1.tar.gz && \
+    cd openssh-7.0p1 && \
+    ./configure --with-ssl-dir=/usr/local/ssl --without-openssl-header-check && \
+    make && \
+    make install && \
+    cd .. && \
+    rm -rf openssh-7.0p1.tar.gz openssh-7.0p1
+
+
+
+
+# Copy configuration files into their respective locations
+COPY snmpd.conf /etc/snmp/snmpd.conf
+COPY sshd_config /etc/ssh/sshd_config
+
+# Expose SNMP and SSH ports
+EXPOSE 22 161/udp
+
+# Ensure services use the configuration files and start them
+CMD ["/bin/bash", "-c", "service snmpd start && /usr/local/sbin/sshd -D"]
